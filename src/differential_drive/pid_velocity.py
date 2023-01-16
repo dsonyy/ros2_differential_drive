@@ -49,15 +49,15 @@ class PidVelocity(Node):
         self.prev_encoder = 0
 
         ### get parameters ####
-        self.Kp = self.declare_parameter('Kp', 10).value
-        self.Ki = self.declare_parameter('Ki', 10).value
+        self.Kp = self.declare_parameter('Kp', 10.0).value
+        self.Ki = self.declare_parameter('Ki', 10.0).value
         self.Kd = self.declare_parameter('Kd', 0.001).value
-        self.out_min = self.declare_parameter('out_min', -255).value
-        self.out_max = self.declare_parameter('out_max', 255).value
-        self.rate = self.declare_parameter('rate', 30).value
+        self.out_min = self.declare_parameter('out_min', -255.0).value
+        self.out_max = self.declare_parameter('out_max', 255.0).value
+        self.rate = self.declare_parameter('rate', 30.0).value
         self.rolling_pts = self.declare_parameter('rolling_pts', 2).value
         self.timeout_ticks = self.declare_parameter('timeout_ticks', 4).value
-        self.ticks_per_meter = self.declare_parameter('ticks_meter', 20).value
+        self.ticks_per_meter = self.declare_parameter('ticks_meter', 20.0).value
         self.vel_threshold = self.declare_parameter('vel_threshold', 0.001).value
         self.encoder_min = self.declare_parameter('encoder_min', -32768).value
         self.encoder_max = self.declare_parameter('encoder_max', 32768).value
