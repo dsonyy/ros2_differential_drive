@@ -72,8 +72,8 @@ class PidVelocity(Node):
             self.nodename, self.Kp, self.Ki, self.Kd, self.ticks_per_meter))
 
         # subscribers/publishers
-        self.create_subscription(Int16, 'lwheel', self.wheel_callback, 10)
-        self.create_subscription(Float32, 'lwheel_vtarget', self.target_callback, 10)
+        self.create_subscription(Int16, 'wheel', self.wheel_callback, 10)
+        self.create_subscription(Float32, 'wheel_vtarget', self.target_callback, 10)
         self.pub_motor = self.create_publisher(Float32, 'motor_cmd', 10)
         self.pub_vel = self.create_publisher(Float32, 'wheel_vel', 10)
 
