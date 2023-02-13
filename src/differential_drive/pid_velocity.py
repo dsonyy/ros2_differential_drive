@@ -35,13 +35,13 @@ class PidVelocity(Node):
         self.get_logger().info(f"{self.nodename} started")
 
         # initialize variables
-        self.target = 0
+        self.target = 0.0
         self.motor = 0
-        self.vel = 0
-        self.integral = 0
-        self.error = 0
-        self.derivative = 0
-        self.previous_error = 0
+        self.vel = 0.0
+        self.integral = 0.0
+        self.error = 0.0
+        self.derivative = 0.0
+        self.previous_error = 0.0
         self.wheel_prev = 0
         self.wheel_latest = 0
         self.then = self.get_clock().now()
@@ -83,21 +83,20 @@ class PidVelocity(Node):
         self.timer = self.create_timer(1.0 / self.rate, self.spin_once)
 
     def spin_once(self):
-        self.previous_error = 0.0
-        self.prev_vel = [0.0] * self.rolling_pts
-        self.integral = 0.0
-        self.error = 0.0
-        self.derivative = 0.0
-        self.vel = 0.0
-
+        if rclpy.ok() and self.ticks_since_target >= self.timeout_ticks:
+            self.previous_error = 0.0
+            self.prev_vel = [0.0] * self.rolling_pts
+            self.integral = 0.0
+            self.error = 0.0
+            self.derivative = 0.0
+            self.vel = 0.0
+            self.pub_motor.publish(Float32(data=0.0))
         # only do the loop if we've recently recieved a target velocity message
-        while rclpy.ok() and self.ticks_since_target < self.timeout_ticks:
+        elif rclpy.ok():
             self.calc_velocity()
             self.do_pid()
             self.pub_motor.publish(Float32(data=self.motor))
             self.ticks_since_target += 1
-            if self.ticks_since_target == self.timeout_ticks:
-                self.pub_motor.publish(Float32(data=0.0))
 
     def calc_velocity(self):
         self.dt_duration = self.get_clock().now() - self.then
