@@ -34,80 +34,73 @@ class PidVelocity(Node):
         self.nodename = "pid_velocity"
         self.get_logger().info(f"{self.nodename} started")
 
-        ### initialize variables
-        self.target = 0
+        # initialize variables
+        self.target = 0.0
         self.motor = 0
-        self.vel = 0
-        self.integral = 0
-        self.error = 0
-        self.derivative = 0
-        self.previous_error = 0
+        self.vel = 0.0
+        self.integral = 0.0
+        self.error = 0.0
+        self.derivative = 0.0
+        self.previous_error = 0.0
         self.wheel_prev = 0
         self.wheel_latest = 0
         self.then = self.get_clock().now()
         self.wheel_mult = 0
         self.prev_encoder = 0
 
-        ### get parameters #### 
-        self.Kp = self.declare_parameter('Kp', 10).value
-        self.Ki = self.declare_parameter('Ki', 10).value
+        ### get parameters ####
+        self.Kp = self.declare_parameter('Kp', 10.0).value
+        self.Ki = self.declare_parameter('Ki', 10.0).value
         self.Kd = self.declare_parameter('Kd', 0.001).value
-        self.out_min = self.declare_parameter('out_min', -255).value
-        self.out_max = self.declare_parameter('out_max', 255).value
-        self.rate = self.declare_parameter('rate', 30).value
+        self.out_min = self.declare_parameter('out_min', -255.0).value
+        self.out_max = self.declare_parameter('out_max', 255.0).value
+        self.rate = self.declare_parameter('rate', 30.0).value
         self.rolling_pts = self.declare_parameter('rolling_pts', 2).value
         self.timeout_ticks = self.declare_parameter('timeout_ticks', 4).value
-        self.ticks_per_meter = self.declare_parameter('ticks_meter', 20).value
+        self.ticks_per_meter = self.declare_parameter('ticks_meter', 20.0).value
         self.vel_threshold = self.declare_parameter('vel_threshold', 0.001).value
         self.encoder_min = self.declare_parameter('encoder_min', -32768).value
         self.encoder_max = self.declare_parameter('encoder_max', 32768).value
         self.encoder_low_wrap = self.declare_parameter('wheel_low_wrap', (
-                    self.encoder_max - self.encoder_min) * 0.3 + self.encoder_min).value
+            self.encoder_max - self.encoder_min) * 0.3 + self.encoder_min).value
         self.encoder_high_wrap = self.declare_parameter('wheel_high_wrap', (
-                    self.encoder_max - self.encoder_min) * 0.7 + self.encoder_min).value
+            self.encoder_max - self.encoder_min) * 0.7 + self.encoder_min).value
         self.prev_vel = [0.0] * self.rolling_pts
         self.wheel_latest = 0.0
         self.prev_pid_time = self.get_clock().now()
         self.get_logger().debug("%s got Kp:%0.3f Ki:%0.3f Kd:%0.3f tpm:%0.3f" % (
             self.nodename, self.Kp, self.Ki, self.Kd, self.ticks_per_meter))
 
-        #### subscribers/publishers 
+        # subscribers/publishers
         self.create_subscription(Int16, 'wheel', self.wheel_callback, 10)
         self.create_subscription(Float32, 'wheel_vtarget', self.target_callback, 10)
         self.pub_motor = self.create_publisher(Float32, 'motor_cmd', 10)
         self.pub_vel = self.create_publisher(Float32, 'wheel_vel', 10)
 
-    def spin(self):
-        self.r = self.create_rate(self.rate)
-        self.then = self.get_clock().now()
         self.ticks_since_target = self.timeout_ticks
         self.wheel_prev = self.wheel_latest
         self.then = self.get_clock().now()
-        while rclpy.ok():
-            self.spin_once()
-            self.r.sleep()
+        self.timer = self.create_timer(1.0 / self.rate, self.spin_once)
 
     def spin_once(self):
-        self.previous_error = 0.0
-        self.prev_vel = [0.0] * self.rolling_pts
-        self.integral = 0.0
-        self.error = 0.0
-        self.derivative = 0.0
-        self.vel = 0.0
-
+        if rclpy.ok() and self.ticks_since_target >= self.timeout_ticks:
+            self.previous_error = 0.0
+            self.prev_vel = [0.0] * self.rolling_pts
+            self.integral = 0.0
+            self.error = 0.0
+            self.derivative = 0.0
+            self.vel = 0.0
+            self.pub_motor.publish(Float32(data=0.0))
         # only do the loop if we've recently recieved a target velocity message
-        while rclpy.ok() and self.ticks_since_target < self.timeout_ticks:
+        elif rclpy.ok():
             self.calc_velocity()
             self.do_pid()
-            self.pub_motor.publish(self.motor)
-            self.r.sleep()
+            self.pub_motor.publish(Float32(data=self.motor))
             self.ticks_since_target += 1
-            if self.ticks_since_target == self.timeout_ticks:
-                self.pub_motor.publish(0)
 
     def calc_velocity(self):
         self.dt_duration = self.get_clock().now() - self.then
-        self.dt = self.dt_duration.to_sec()
+        self.dt = self.dt_duration.nanoseconds / 10**9
         self.get_logger().debug("-D- %s caclVelocity dt=%0.3f wheel_latest=%0.3f wheel_prev=%0.3f" % (
             self.nodename, self.dt, self.wheel_latest, self.wheel_prev))
 
@@ -117,8 +110,8 @@ class PidVelocity(Node):
             if abs(cur_vel) < self.vel_threshold:
                 # if the velocity is < threshold, consider our velocity 0
                 self.get_logger().debug("-D- %s below threshold cur_vel=%0.3f vel=0" % (self.nodename, cur_vel))
-                self.appendVel(0)
-                self.calcRollingVel()
+                self.append_vel(0)
+                self.calc_rolling_vel()
             else:
                 self.get_logger().debug("-D- %s above threshold cur_vel=%0.3f" % (self.nodename, cur_vel))
                 if abs(cur_vel) < self.vel:
@@ -136,7 +129,7 @@ class PidVelocity(Node):
             self.wheel_prev = self.wheel_latest
             self.then = self.get_clock().now()
 
-        self.pub_vel.publish(self.vel)
+        self.pub_vel.publish(Float32(data=self.vel))
 
     def append_vel(self, val):
         self.prev_vel.append(val)
@@ -148,7 +141,7 @@ class PidVelocity(Node):
 
     def do_pid(self):
         pid_dt_duration = self.get_clock().now() - self.prev_pid_time
-        pid_dt = pid_dt_duration.to_sec()
+        pid_dt = pid_dt_duration.nanoseconds / 10**9
         self.prev_pid_time = self.get_clock().now()
 
         self.error = self.target - self.vel
@@ -166,11 +159,11 @@ class PidVelocity(Node):
             self.motor = self.out_min
             self.integral = self.integral - (self.error * pid_dt)
 
-        if self.target == 0:
-            self.motor = 0
+        if self.target == 0.0:
+            self.motor = 0.0
 
         self.get_logger().debug("vel:%0.2f tar:%0.2f err:%0.2f int:%0.2f der:%0.2f ## motor:%d " %
-                       (self.vel, self.target, self.error, self.integral, self.derivative, self.motor))
+                                (self.vel, self.target, self.error, self.integral, self.derivative, self.motor))
 
     def wheel_callback(self, msg):
         enc = msg.data
@@ -181,27 +174,25 @@ class PidVelocity(Node):
             self.wheel_mult = self.wheel_mult - 1
 
         self.wheel_latest = 1.0 * (
-                enc + self.wheel_mult * (self.encoder_max - self.encoder_min)) / self.ticks_per_meter
+            enc + self.wheel_mult * (self.encoder_max - self.encoder_min)) / self.ticks_per_meter
         self.prev_encoder = enc
-
-    #        rospy.logdebug("-D- %s wheelCallback msg.data= %0.3f wheel_latest = %0.3f mult=%0.3f" % (self.nodename, enc, self.wheel_latest, self.wheel_mult))
 
     def target_callback(self, msg):
         self.target = msg.data
         self.ticks_since_target = 0
-        # rospy.logdebug("-D- %s targetCallback " % (self.nodename))
 
 
 def main(args=None):
     rclpy.init(args=args)
     try:
         pid_velocity = PidVelocity()
-        pid_velocity.spin()
+        rclpy.spin(pid_velocity)
     except rclpy.exceptions.ROSInterruptException:
         pass
 
     pid_velocity.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
